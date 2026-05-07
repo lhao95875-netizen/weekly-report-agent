@@ -10,10 +10,9 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app import to_structured_log  # noqa: E402
-
 
 DEFAULT_CASES_FILE = ROOT_DIR / "data" / "eval_cases.json"
+LABELS = ["tasks", "blockers", "plans"]
 
 
 def normalize_text(value: str) -> str:
@@ -65,12 +64,14 @@ def extract_titles(structured: dict[str, Any]) -> dict[str, list[str]]:
 
 
 async def evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
+    from app import to_structured_log
+
     structured, source = await to_structured_log(case["input"])
     actual = extract_titles(structured)
     expected = case["expected"]
     scores = {
         key: score_list(expected.get(key, []), actual.get(key, []))
-        for key in ["tasks", "blockers", "plans"]
+        for key in LABELS
     }
     recall_values = [scores[key]["recall"] for key in scores]
     precision_values = [scores[key]["precision"] for key in scores]
@@ -86,6 +87,39 @@ async def evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def aggregate_label_metrics(results: list[dict[str, Any]]) -> dict[str, dict[str, float | int]]:
+    metrics: dict[str, dict[str, float | int]] = {}
+    for label in LABELS:
+        expected_count = sum(result["scores"][label]["expected_count"] for result in results)
+        actual_count = sum(result["scores"][label]["actual_count"] for result in results)
+        hit_count = sum(result["scores"][label]["hit_count"] for result in results)
+        metrics[label] = {
+            "expected_count": expected_count,
+            "actual_count": actual_count,
+            "hit_count": hit_count,
+            "recall": hit_count / expected_count if expected_count else 1.0,
+            "precision": hit_count / actual_count if actual_count else (1.0 if expected_count == 0 else 0.0),
+        }
+    return metrics
+
+
+def evaluate_quality_gate(report: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    failures = []
+    if args.min_recall is not None and report["avg_recall"] < args.min_recall:
+        failures.append(f"avg_recall {report['avg_recall']:.2%} < {args.min_recall:.2%}")
+    if args.min_precision is not None and report["avg_precision"] < args.min_precision:
+        failures.append(f"avg_precision {report['avg_precision']:.2%} < {args.min_precision:.2%}")
+    if args.max_local_rate is not None and report["local_fallback_rate"] > args.max_local_rate:
+        failures.append(
+            f"local_fallback_rate {report['local_fallback_rate']:.2%} > {args.max_local_rate:.2%}"
+        )
+    return {
+        "enabled": any(value is not None for value in [args.min_recall, args.min_precision, args.max_local_rate]),
+        "passed": not failures,
+        "failures": failures,
+    }
+
+
 async def run_eval(cases_file: Path) -> dict[str, Any]:
     cases = json.loads(cases_file.read_text(encoding="utf-8"))
     results = []
@@ -97,28 +131,59 @@ async def run_eval(cases_file: Path) -> dict[str, Any]:
     for result in results:
         source_counts[result["source"]] = source_counts.get(result["source"], 0) + 1
 
+    structured_count = sum(count for source, count in source_counts.items() if source != "local")
+    local_count = source_counts.get("local", 0)
+    label_metrics = aggregate_label_metrics(results)
+
     return {
         "total_cases": total,
         "source_counts": source_counts,
+        "structured_rate": structured_count / total if total else 0,
+        "local_fallback_rate": local_count / total if total else 0,
         "avg_recall": sum(item["avg_recall"] for item in results) / total if total else 0,
         "avg_precision": sum(item["avg_precision"] for item in results) / total if total else 0,
+        "label_metrics": label_metrics,
         "results": results,
     }
+
+
+def write_report(report: dict[str, Any], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def print_report(report: dict[str, Any], show_details: bool) -> None:
     print("=== Weekly Agent Structuring Eval ===")
     print(f"Total cases: {report['total_cases']}")
     print(f"Source counts: {report['source_counts']}")
+    print(f"Structured rate: {report['structured_rate']:.2%}")
+    print(f"Local fallback rate: {report['local_fallback_rate']:.2%}")
     print(f"Average recall: {report['avg_recall']:.2%}")
     print(f"Average precision: {report['avg_precision']:.2%}")
+
+    print("\n=== Per-label Metrics ===")
+    for label, metrics in report["label_metrics"].items():
+        print(
+            f"{label:<8} recall={metrics['recall']:.2%} precision={metrics['precision']:.2%} "
+            f"hits={metrics['hit_count']}/{metrics['expected_count']} actual={metrics['actual_count']}"
+        )
+
+    gate = report.get("quality_gate")
+    if gate and gate["enabled"]:
+        print("\n=== Quality Gate ===")
+        print("PASS" if gate["passed"] else "FAIL")
+        for failure in gate["failures"]:
+            print(f"- {failure}")
 
     if not show_details:
         return
 
     print("\n=== Details ===")
     for result in report["results"]:
-        print(f"\n[{result['id']}] source={result['source']} recall={result['avg_recall']:.2%} precision={result['avg_precision']:.2%}")
+        print(
+            f"\n[{result['id']}] source={result['source']} "
+            f"recall={result['avg_recall']:.2%} precision={result['avg_precision']:.2%}"
+        )
         print(f"Input: {result['input']}")
         print(f"Actual tasks: {result['actual']['tasks']}")
         print(f"Actual blockers: {result['actual']['blockers']}")
@@ -133,16 +198,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES_FILE, help="Path to eval cases JSON file.")
     parser.add_argument("--details", action="store_true", help="Print per-case details.")
     parser.add_argument("--json", action="store_true", help="Print full JSON report.")
+    parser.add_argument("--output", type=Path, help="Path to save JSON report.")
+    parser.add_argument("--min-recall", type=float, help="Minimum allowed average recall, e.g. 0.85.")
+    parser.add_argument("--min-precision", type=float, help="Minimum allowed average precision, e.g. 0.85.")
+    parser.add_argument("--max-local-rate", type=float, help="Maximum allowed local fallback rate, e.g. 0.2.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     report = asyncio.run(run_eval(args.cases))
+    report["quality_gate"] = evaluate_quality_gate(report, args)
+
+    if args.output:
+        write_report(report, args.output)
+
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print_report(report, show_details=args.details)
+        if args.output:
+            print(f"\nSaved JSON report to: {args.output}")
+
+    if report["quality_gate"]["enabled"] and not report["quality_gate"]["passed"]:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

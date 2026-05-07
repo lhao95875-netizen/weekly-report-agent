@@ -148,9 +148,9 @@ structured_by = local
 
 ## Eval Harness
 
-项目内置结构化评估脚本，用于评估模型对 `tasks`、`blockers`、`plans` 的抽取质量。
+项目内置结构化评估脚本，用于评估模型对 `tasks`、`blockers`、`plans` 的抽取质量，并支持质量门禁和 JSON 报告输出。
 
-运行：
+基础运行：
 
 ```bash
 python scripts/eval_structuring.py
@@ -162,17 +162,41 @@ python scripts/eval_structuring.py
 python scripts/eval_structuring.py --details
 ```
 
-输出 JSON 报告：
+输出 JSON 到终端：
 
 ```bash
 python scripts/eval_structuring.py --json
 ```
 
+保存 JSON 报告：
+
+```bash
+python scripts/eval_structuring.py --output reports/eval-latest.json
+```
+
+启用质量门禁：
+
+```bash
+python scripts/eval_structuring.py \
+  --min-recall 0.85 \
+  --min-precision 0.85 \
+  --max-local-rate 0.20 \
+  --output reports/eval-latest.json
+```
+
+如果整体 recall / precision 低于阈值，或本地 fallback 比例高于阈值，脚本会返回非零退出码，可用于 CI 或发布前检查。
+
 评估指标：
 
 - `source_counts`：结构化来源分布，例如 `aliyun_qwen_structured`、`aliyun_qwen_json`、`local`
-- `Average recall`：应识别内容中被成功识别的比例
-- `Average precision`：模型输出内容中正确内容的比例
+- `structured_rate`：非本地规则结构化比例
+- `local_fallback_rate`：本地规则 fallback 比例
+- `avg_recall`：整体平均召回率
+- `avg_precision`：整体平均准确率
+- `label_metrics.tasks.recall / precision`：任务抽取召回率和准确率
+- `label_metrics.blockers.recall / precision`：阻塞项抽取召回率和准确率
+- `label_metrics.plans.recall / precision`：计划项抽取召回率和准确率
+- `quality_gate`：质量门禁是否启用、是否通过以及失败原因
 
 ## 调试 LLM 调用
 
@@ -230,5 +254,5 @@ data/logs.json
 - 使用 LangChain + Qwen 构建 LLM 调用链路
 - 使用 Pydantic structured output 提升结构化稳定性
 - 设计模型失败 fallback，增强系统可用性
-- 构建 eval harness，用 recall / precision 评估结构化质量
+- 构建 eval harness，用 recall / precision / fallback rate 评估结构化质量，并支持质量门禁
 - 基于 FastAPI 实现完整日报录入、查询、聚合和周报生成流程
