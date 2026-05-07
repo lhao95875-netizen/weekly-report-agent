@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+myenv/
+weekly-agent-env/
+*.log
+
+data/logs.json
+指令
