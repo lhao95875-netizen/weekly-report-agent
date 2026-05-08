@@ -13,6 +13,8 @@
 - 按周聚合日报数据
 - 一键生成中文周报
 - 内置 eval harness，评估结构化抽取的 recall / precision
+- 支持 eval 质量门禁，不达标时返回非零退出码
+- 支持 JSON eval 报告输出
 - 提供简单 Web 页面入口
 
 ## 技术栈
@@ -25,6 +27,40 @@
 - Uvicorn
 - HTML / CSS / JavaScript
 
+## 系统架构
+
+```text
+User Daily Log
+      ↓
+FastAPI API / Web UI
+      ↓
+LangChain + Qwen Structured Output
+      ↓
+Normalizer / JSON Fallback / Local Rule Fallback
+      ↓
+Local Log Store (data/logs.json)
+      ↓
+Weekly Aggregator
+      ↓
+Weekly Report Generator
+```
+
+结构化质量评估链路：
+
+```text
+Eval Cases (data/eval_cases.json)
+      ↓
+Current Structuring Pipeline
+      ↓
+Expected vs Actual Matching
+      ↓
+Per-label Precision / Recall
+      ↓
+Quality Gate
+      ↓
+JSON Report / CI Exit Code
+```
+
 ## 项目结构
 
 ```text
@@ -34,6 +70,8 @@ WEEKLY-AGENT/
 ├─ README.md
 ├─ data/
 │  └─ eval_cases.json
+├─ reports/
+│  └─ eval-example.json
 ├─ scripts/
 │  └─ eval_structuring.py
 └─ static/
@@ -46,6 +84,7 @@ WEEKLY-AGENT/
 - `static/index.html`：网页入口
 - `data/eval_cases.json`：结构化评估样例
 - `scripts/eval_structuring.py`：eval harness 评估脚本
+- `reports/eval-example.json`：示例 eval JSON 报告
 - `data/logs.json`：本地日报数据，默认不提交到 Git
 
 ## 快速开始
@@ -186,6 +225,42 @@ python scripts/eval_structuring.py \
 
 如果整体 recall / precision 低于阈值，或本地 fallback 比例高于阈值，脚本会返回非零退出码，可用于 CI 或发布前检查。
 
+### 示例输出
+
+```text
+=== Weekly Agent Structuring Eval ===
+Total cases: 10
+Source counts: {'aliyun_qwen_structured': 8, 'aliyun_qwen_json': 1, 'local': 1}
+Structured rate: 90.00%
+Local fallback rate: 10.00%
+Average recall: 91.67%
+Average precision: 88.33%
+
+=== Per-label Metrics ===
+tasks    recall=95.00% precision=90.48% hits=19/20 actual=21
+blockers recall=85.71% precision=85.71% hits=6/7 actual=7
+plans    recall=93.33% precision=93.33% hits=14/15 actual=15
+
+=== Quality Gate ===
+PASS
+
+Saved JSON report to: reports/eval-latest.json
+```
+
+### 质量门禁说明
+
+Eval harness 会先执行当前结构化链路，再把实际输出和 `data/eval_cases.json` 中的期望结果进行匹配，聚合出整体和分标签指标。
+
+门禁参数：
+
+| 参数 | 说明 |
+|---|---|
+| `--min-recall` | 整体平均 recall 必须达到的最低值 |
+| `--min-precision` | 整体平均 precision 必须达到的最低值 |
+| `--max-local-rate` | 本地规则 fallback 比例允许的最高值 |
+
+如果任一指标不达标，脚本会输出失败原因并返回非零退出码，便于后续接入 GitHub Actions 或其他 CI 流程。
+
 评估指标：
 
 - `source_counts`：结构化来源分布，例如 `aliyun_qwen_structured`、`aliyun_qwen_json`、`local`
@@ -197,6 +272,8 @@ python scripts/eval_structuring.py \
 - `label_metrics.blockers.recall / precision`：阻塞项抽取召回率和准确率
 - `label_metrics.plans.recall / precision`：计划项抽取召回率和准确率
 - `quality_gate`：质量门禁是否启用、是否通过以及失败原因
+
+完整示例报告见：`reports/eval-example.json`。
 
 ## 调试 LLM 调用
 
@@ -228,26 +305,27 @@ http://127.0.0.1:8000/debug/llm
 
 ## 安全说明
 
-请不要提交真实 API Key 或真实工作日志。
+请不要提交真实 API Key、真实工作日志或本地 eval 最新报告。
 
 建议忽略：
 
 ```gitignore
 .env
 data/logs.json
+reports/eval-latest.json
 ```
 
-如需提供示例数据，建议创建 `data/logs.example.json`。
+如需提供示例数据，建议创建 `data/logs.example.json`；如需展示 eval 结果，建议提交脱敏后的 `reports/eval-example.json`。
 
 ## 后续优化方向
 
 - 增加 `postprocess_structured_log`，进一步修正模型误分类
 - 扩展 eval cases 到 30-50 条
-- 为 eval harness 增加阈值门禁
-- 增加 `/chat` 自然语言入口
+- 增加 `/chat` 自然语言入口和 tool layer
 - 使用 LangGraph 管理多步骤 Agent 工作流
 - 接入向量检索，实现历史日报/周报记忆
-- 接入飞书或企业微信机器人，自动提醒和发送周报
+- 接入 GitHub Actions，让 eval harness 成为 CI 质量门禁
+- 封装 MCP tools，让外部 Agent 客户端调用日报和周报能力
 
 ## 项目亮点
 
@@ -255,4 +333,5 @@ data/logs.json
 - 使用 Pydantic structured output 提升结构化稳定性
 - 设计模型失败 fallback，增强系统可用性
 - 构建 eval harness，用 recall / precision / fallback rate 评估结构化质量，并支持质量门禁
+- 输出 JSON eval 报告，便于追踪 prompt、模型和规则变更前后的质量变化
 - 基于 FastAPI 实现完整日报录入、查询、聚合和周报生成流程

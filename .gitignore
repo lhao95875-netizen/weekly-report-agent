@@ -7,4 +7,5 @@ weekly-agent-env/
 *.log
 
 data/logs.json
+reports/eval-latest.json
 指令

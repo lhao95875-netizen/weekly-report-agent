@@ -1,0 +1,95 @@
+{
+  "total_cases": 10,
+  "source_counts": {
+    "aliyun_qwen_structured": 8,
+    "aliyun_qwen_json": 1,
+    "local": 1
+  },
+  "structured_rate": 0.9,
+  "local_fallback_rate": 0.1,
+  "avg_recall": 0.9167,
+  "avg_precision": 0.8833,
+  "label_metrics": {
+    "tasks": {
+      "expected_count": 20,
+      "actual_count": 21,
+      "hit_count": 19,
+      "recall": 0.95,
+      "precision": 0.9048
+    },
+    "blockers": {
+      "expected_count": 7,
+      "actual_count": 7,
+      "hit_count": 6,
+      "recall": 0.8571,
+      "precision": 0.8571
+    },
+    "plans": {
+      "expected_count": 15,
+      "actual_count": 15,
+      "hit_count": 14,
+      "recall": 0.9333,
+      "precision": 0.9333
+    }
+  },
+  "quality_gate": {
+    "enabled": true,
+    "passed": true,
+    "failures": []
+  },
+  "results": [
+    {
+      "id": "example-001",
+      "source": "aliyun_qwen_structured",
+      "input": "完成 LangChain structured output 接入，新增 eval harness，下周计划接入 LangGraph",
+      "actual": {
+        "tasks": [
+          "完成 LangChain structured output 接入",
+          "新增 eval harness"
+        ],
+        "blockers": [],
+        "plans": [
+          "下周计划接入 LangGraph"
+        ]
+      },
+      "expected": {
+        "tasks": [
+          "完成 LangChain structured output 接入",
+          "新增 eval harness"
+        ],
+        "blockers": [],
+        "plans": [
+          "下周计划接入 LangGraph"
+        ]
+      },
+      "scores": {
+        "tasks": {
+          "expected_count": 2,
+          "actual_count": 2,
+          "hit_count": 2,
+          "precision": 1.0,
+          "recall": 1.0,
+          "missed": []
+        },
+        "blockers": {
+          "expected_count": 0,
+          "actual_count": 0,
+          "hit_count": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "missed": []
+        },
+        "plans": {
+          "expected_count": 1,
+          "actual_count": 1,
+          "hit_count": 1,
+          "precision": 1.0,
+          "recall": 1.0,
+          "missed": []
+        }
+      },
+      "avg_recall": 1.0,
+      "avg_precision": 1.0
+    }
+  ]
+}
