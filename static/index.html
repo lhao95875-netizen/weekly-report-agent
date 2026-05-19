@@ -6,22 +6,326 @@
 <title>周报 Agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
 <style>
-:root{--panel:rgba(26,26,26,.78);--panel2:rgba(40,40,40,.95);--text:#f6f1e9;--muted:#b3a58c;--line:rgba(245,158,11,.18);--shadow:0 20px 60px rgba(0,0,0,.45)}*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:"IBM Plex Mono",monospace;color:var(--text);background:radial-gradient(circle at top left,rgba(239,68,68,.18),transparent 28%),radial-gradient(circle at 85% 20%,rgba(245,158,11,.16),transparent 30%),linear-gradient(135deg,#0a0a0a,#17130f 48%,#120d0b);padding:36px}.wrap{max-width:1180px;margin:0 auto;display:grid;gap:24px}.hero,.card{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(14px);border-radius:24px}.hero{padding:28px;position:relative;overflow:hidden}.hero:after{content:"WEEKLY AGENT";position:absolute;right:22px;top:14px;color:rgba(245,158,11,.08);font-size:46px;letter-spacing:4px;font-weight:500}h1,h2{margin:0 0 14px;font-family:"ZCOOL XiaoWei",serif;font-weight:400;letter-spacing:1px}h1{font-size:44px}h2{font-size:28px}.sub{max-width:760px;color:var(--muted);line-height:1.8;font-size:14px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.card{padding:22px}label{display:block;margin:14px 0 8px;color:#f8d9a0;font-size:13px}input,textarea,button{width:100%;border-radius:14px;border:1px solid rgba(245,158,11,.18);background:var(--panel2);color:var(--text);font:inherit}input,textarea{padding:14px 16px;outline:none}textarea{min-height:180px;resize:vertical;line-height:1.7}input:focus,textarea:focus{border-color:rgba(245,158,11,.55);box-shadow:0 0 0 4px rgba(245,158,11,.08)}button{margin-top:18px;padding:14px 18px;cursor:pointer;background:linear-gradient(90deg,#f59e0b,#ef4444);color:#1b1208;font-weight:700;transition:transform .18s ease,box-shadow .18s ease}button:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(239,68,68,.22)}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.output{min-height:220px;overflow:auto;display:grid;gap:14px;padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(245,158,11,.08),rgba(12,12,12,.86) 26%),rgba(12,12,12,.82);border:1px solid rgba(245,158,11,.24);color:#f3eadb;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}.output.empty,.output.loading,.output.error{display:flex;align-items:center;justify-content:center;text-align:center;font-size:15px}.output.loading{color:#ffd89b}.output.error{color:#ffb4b4;border-color:rgba(239,68,68,.35);background:linear-gradient(180deg,rgba(239,68,68,.12),rgba(12,12,12,.9))}.hint{font-size:12px;color:var(--muted);margin-top:8px}.pill{display:inline-block;border:1px solid rgba(245,158,11,.28);color:#ffd89b;padding:6px 10px;border-radius:999px;margin:0 8px 8px 0;font-size:12px}.result-hero{padding:16px 18px;border-radius:16px;background:linear-gradient(90deg,rgba(245,158,11,.18),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.2)}.result-kicker{font-size:11px;color:#f8d9a0;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:8px}.result-title{font-family:"ZCOOL XiaoWei",serif;font-size:28px;line-height:1.35;margin:0}.result-meta{color:var(--muted);font-size:12px;margin-top:10px}.section-card{padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(245,158,11,.14)}.section-title{margin:0 0 10px;color:#ffd89b;font-size:13px;letter-spacing:1px}.bullet-list{margin:0;padding-left:18px;line-height:1.85;color:#f8f0e1}.metric-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}.metric-box{padding:14px;border-radius:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.16);text-align:center}.metric-label{color:var(--muted);font-size:11px;margin-bottom:6px}.metric-value{font-size:24px;font-weight:700;color:#fff3da}.day-stack{display:grid;gap:12px}.day-card{padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.025);border-left:4px solid rgba(245,158,11,.55);border-top:1px solid rgba(245,158,11,.12);border-right:1px solid rgba(245,158,11,.08);border-bottom:1px solid rgba(245,158,11,.08)}.day-date{font-family:"ZCOOL XiaoWei",serif;font-size:22px;margin-bottom:8px;color:#fff0d0}.day-summary{color:#f7e7c4;margin-bottom:10px;line-height:1.75}.report-text{white-space:pre-wrap;line-height:1.95;font-size:15px;color:#fff2dc}@media (max-width:920px){.grid,.two-col{grid-template-columns:1fr}body{padding:18px}h1{font-size:34px}}
+:root{--bg:#f5f7fb;--card:#ffffff;--card2:#f8fbff;--ink:#172033;--muted:#667085;--brand:#2563eb;--brand2:#0f766e;--line:#e5eaf2;--shadow:0 24px 70px rgba(16,24,40,.10);--soft:rgba(37,99,235,.08)}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,"Microsoft YaHei",sans-serif;background:radial-gradient(circle at top left,rgba(37,99,235,.12),transparent 30%),radial-gradient(circle at 85% 15%,rgba(15,118,110,.11),transparent 28%),var(--bg);color:var(--ink);line-height:1.65}.shell{max-width:1240px;margin:0 auto;padding:24px}.hero{background:linear-gradient(135deg,rgba(255,255,255,.92),rgba(248,251,255,.88));border:1px solid var(--line);box-shadow:var(--shadow);border-radius:28px;padding:30px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:20px;align-items:flex-start}.title h1{margin:0;font-size:42px;line-height:1.08}.title p{margin:12px 0 0;color:var(--muted);max-width:760px}.badges{display:flex;flex-wrap:wrap;gap:10px}.badge{padding:8px 12px;border-radius:999px;background:var(--soft);color:var(--brand);font-weight:700;font-size:13px;border:1px solid rgba(37,99,235,.14)}.actions{display:flex;gap:10px;flex-wrap:wrap}.button,.ghost{display:inline-flex;align-items:center;justify-content:center;padding:12px 16px;border-radius:14px;font-weight:700;text-decoration:none;border:1px solid transparent;transition:transform .16s ease,box-shadow .16s ease,background .16s ease}.button{background:linear-gradient(90deg,var(--brand),#4f46e5);color:#fff;box-shadow:0 12px 28px rgba(37,99,235,.24)}.ghost{background:#fff;color:var(--ink);border-color:var(--line)}.button:hover,.ghost:hover{transform:translateY(-1px)}.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:22px;margin-top:22px}.card{background:rgba(255,255,255,.92);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:24px;padding:22px}.card h2{margin:0 0 14px;font-size:22px}.sub{color:var(--muted);font-size:14px;margin:-6px 0 18px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:grid;gap:8px;margin-bottom:12px}.field label{font-size:13px;font-weight:700;color:#334155}input,textarea,select{width:100%;border:1px solid var(--line);background:var(--card2);color:var(--ink);border-radius:14px;padding:13px 14px;font:inherit;outline:none}textarea{min-height:160px;resize:vertical;line-height:1.7}input:focus,textarea:focus,select:focus{border-color:rgba(37,99,235,.45);box-shadow:0 0 0 4px rgba(37,99,235,.08)}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}.toolbar button{border:none;cursor:pointer}.muted-btn{background:#eef2ff;color:#1e40af}.result{margin-top:16px;min-height:220px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,#fff,rgba(248,251,255,.86));padding:18px;overflow:auto}.empty,.loading,.error{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);min-height:220px}.error{color:#b42318;background:#fff5f5;border-color:#fecaca}.loading{color:#1d4ed8}.stack{display:grid;gap:12px}.panel{padding:14px 16px;border-radius:16px;background:#fff;border:1px solid var(--line)}.panel-title{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--brand);font-weight:800;margin-bottom:10px}.report{white-space:pre-wrap;line-height:1.9}.intent-box{border-left:4px solid var(--brand);background:linear-gradient(90deg,rgba(37,99,235,.08),rgba(15,118,110,.06));padding:16px;border-radius:18px}.intent-name{font-family:"Noto Serif SC",serif;font-size:28px;margin:0 0 6px}.intent-meta{color:var(--muted);font-size:13px}.json{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.6;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:16px;overflow:auto}.chat-log{display:grid;gap:12px}.message{padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:#fff}.message.user{background:#eff6ff;border-color:#bfdbfe}.message.assistant{background:#f8fafc}.message small{display:block;color:var(--muted);margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.8px}.list{margin:0;padding-left:18px;color:#334155}.list li{margin:6px 0}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.metric{padding:14px;border-radius:16px;background:#f8fbff;border:1px solid var(--line)}.metric b{display:block;font-size:22px;color:var(--brand)}.metric span{display:block;margin-top:4px;color:var(--muted);font-size:12px}.hint{font-size:13px;color:var(--muted)}@media (max-width:960px){.layout,.form-grid,.metrics{grid-template-columns:1fr}.title h1{font-size:34px}.shell{padding:16px}}
 </style>
 </head>
 <body>
-<div class="wrap">
-<section class="hero"><div class="pill">日报录入</div><div class="pill">结构化提取</div><div class="pill">周报总结</div><h1>周报 Agent</h1><div class="sub">每天把工作内容告诉它，它帮你沉淀成结构化日报；一周结束后，再自动汇总成中文周报。</div></section>
-<section class="grid">
-<div class="card"><h2>1. 新增日报</h2><label for="logDate">日期</label><input id="logDate" type="date" /><label for="logContent">今天做了什么</label><textarea id="logContent" placeholder="例如：&#10;- 完成登录接口联调&#10;- 修复支付页按钮状态异常&#10;- 和产品确认下周需求排期"></textarea><button id="saveLog">保存日报</button><div class="hint">支持自然语言输入，后端会自动转成结构化日报。</div></div>
-<div class="card"><h2>2. 查看某天日报</h2><label for="queryDate">日期</label><input id="queryDate" type="date" /><button id="fetchLog">查看日报</button><div id="logResult" class="output empty">这里会显示更醒目的日报结果卡片。</div></div>
-<div class="card"><h2>3. 查看周数据</h2><div class="two-col"><div><label for="weekStart">开始日期</label><input id="weekStart" type="date" /></div><div><label for="weekEnd">结束日期</label><input id="weekEnd" type="date" /></div></div><button id="fetchWeekly">查看周数据</button><div id="weeklyResult" class="output empty">这里会显示按天拆分的周数据面板。</div></div>
-<div class="card"><h2>4. 生成周报</h2><div class="two-col"><div><label for="reportStart">开始日期</label><input id="reportStart" type="date" /></div><div><label for="reportEnd">结束日期</label><input id="reportEnd" type="date" /></div></div><button id="generateReport">生成周报</button><div id="reportResult" class="output empty">这里会显示最终周报正文。</div></div>
-</section></div>
+<div class="shell">
+  <section class="hero">
+    <div class="title">
+      <div class="badges">
+        <span class="badge">日报保存</span>
+        <span class="badge">意图识别</span>
+        <span class="badge">周报生成</span>
+        <span class="badge">Eval 调试</span>
+      </div>
+      <h1>周报 Agent</h1>
+      <p>你可以直接输入自然语言日报并保存，也可以在右侧聊天框里描述需求，系统会先识别意图，再自动调用对应工具。右侧还会展示解析结果，方便你调试 agent 是否理解正确。</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="#direct">直接保存日报</a>
+      <a class="ghost" href="#chat">聊天式调试意图</a>
+    </div>
+  </section>
+
+  <section class="layout">
+    <div class="card" id="direct">
+      <h2>直接录入日报</h2>
+      <div class="sub">适合你已经明确要保存周报素材的时候。</div>
+      <div class="form-grid">
+        <div class="field"><label for="logDate">日期</label><input id="logDate" type="date" /></div>
+        <div class="field"><label for="queryDate">查看日期</label><input id="queryDate" type="date" /></div>
+      </div>
+      <div class="field"><label for="logContent">日报内容</label><textarea id="logContent" placeholder="例如：\n- 完成登录接口联调\n- 修复支付页按钮状态异常\n- 和产品确认下周需求排期"></textarea></div>
+      <div class="toolbar">
+        <button class="button" id="saveLog">保存日报</button>
+        <button class="ghost" id="fetchLog">查询这天日报</button>
+      </div>
+      <div id="directResult" class="result empty">保存或查询结果会显示在这里。</div>
+    </div>
+
+    <div class="card" id="chat">
+      <h2>聊天式意图识别</h2>
+      <div class="sub">输入一句自然语言需求，让系统先识别 intent，再返回实际调用结果和调试信息。</div>
+      <div class="field"><label for="chatMessage">输入你的需求</label><textarea id="chatMessage" placeholder="例如：帮我保存今天日报：完成 README 展示优化，明天接入 LangGraph；或者：运行 eval harness；或者：生成本周周报"></textarea></div>
+      <div class="form-grid">
+        <div class="field"><label for="chatAction">显式动作（可选）</label><select id="chatAction"><option value="">自动识别</option><option value="create_log">保存日报</option><option value="get_daily_log">查询日报</option><option value="get_weekly_data">查看周数据</option><option value="get_weekly_report">生成周报</option><option value="run_eval">运行 eval</option><option value="debug_llm">检查 LLM</option></select></div>
+        <div class="field"><label for="chatDate">日期（可选）</label><input id="chatDate" type="date" /></div>
+      </div>
+      <div class="hint">周报和周数据默认自动使用上个周一到周日，不再需要手动填写开始/结束日期。</div>
+      <div class="toolbar">
+        <button class="button" id="runChat">发送给 Agent</button>
+        <button class="ghost" id="debugIntent">只看意图调试</button>
+      </div>
+      <div id="chatResult" class="result empty">这里会显示意图识别结果和工具输出。</div>
+    </div>
+  </section>
+
+  <section class="layout" style="margin-top:22px">
+    <div class="card">
+      <h2>周数据 / 周报</h2>
+      <div class="sub">默认自动使用上个周一到周日；如果你希望调试其他区间，可以在下面临时修改。</div>
+      <div class="form-grid">
+        <div class="field"><label for="weekStart">开始日期</label><input id="weekStart" type="date" /></div>
+        <div class="field"><label for="weekEnd">结束日期</label><input id="weekEnd" type="date" /></div>
+      </div>
+      <div class="hint">实际调用时，如果你不改日期，系统会自动取上个周一到周日。</div>
+      <div class="toolbar">
+        <button class="button" id="fetchWeekly">查看周数据</button>
+        <button class="ghost" id="generateReport">生成周报</button>
+      </div>
+      <div id="weeklyResult" class="result empty">这里会显示周数据或周报内容。</div>
+    </div>
+
+    <div class="card">
+      <h2>调试建议</h2>
+      <div class="sub">先确认服务能启动，再看意图识别是否正常。</div>
+      <div class="metrics">
+        <div class="metric"><b>1</b><span>保存日报</span></div>
+        <div class="metric"><b>2</b><span>识别意图</span></div>
+        <div class="metric"><b>3</b><span>调用工具</span></div>
+      </div>
+      <div style="margin-top:16px" class="stack">
+        <div class="panel">
+          <div class="panel-title">推荐测试语句</div>
+          <div class="hint">帮我保存今天日报：完成 README 优化，新增 eval 示例报告，明天开始接入 LangGraph</div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">查看是否走了 LLM</div>
+          <div class="hint">如果环境变量配置正确，`/debug/llm` 会返回 `pong`。保存日报后，结构化结果会显示 `structured_by`。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
 <script>
-const today=new Date().toISOString().slice(0,10);['logDate','queryDate','weekStart','weekEnd','reportStart','reportEnd'].forEach(id=>document.getElementById(id).value=today);const esc=(v='')=>v.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');const setState=(el,state,text)=>{el.className=`output ${state}`;el.innerHTML=esc(text)};const list=items=>!items||!items.length?'<div class="hint">暂无内容</div>':`<ul class="bullet-list">${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`;function renderLog(log){const s=log.structured||{},tasks=(s.tasks||[]).map(i=>i.title||'');return `<div class="result-hero"><div class="result-kicker">daily log</div><div class="result-title">${esc(s.summary||'已保存日报')}</div><div class="result-meta">日期：${esc(log.date||'')} · 创建时间：${esc(log.created_at||'')}</div></div><div class="section-card"><div class="section-title">原始日报</div><div class="report-text">${esc(log.content||'')}</div></div><div class="section-card"><div class="section-title">完成事项</div>${list(tasks)}</div><div class="section-card"><div class="section-title">风险与阻塞</div>${list(s.blockers||[])}</div><div class="section-card"><div class="section-title">后续计划</div>${list(s.plans||[])}</div>`}function renderDailyQuery(data){if(!data.logs||!data.logs.length)return '<div class="result-hero"><div class="result-title">这一天还没有日报</div><div class="result-meta">可以先去左侧新增一条。</div></div>';return data.logs.map(renderLog).join('')}function renderWeekly(data){const days=(data.logs||[]).map(log=>`<div class="day-card"><div class="day-date">${esc(log.date)}</div><div class="day-summary">${esc((log.structured&&log.structured.summary)||log.content||'')}</div>${list(((log.structured&&log.structured.tasks)||[]).map(i=>i.title||''))}</div>`).join('');return `<div class="result-hero"><div class="result-kicker">weekly view</div><div class="result-title">${esc(data.start)} → ${esc(data.end)}</div><div class="result-meta">本周共收集 ${esc(String(data.count||0))} 条日报</div></div><div class="metric-row"><div class="metric-box"><div class="metric-label">日报数</div><div class="metric-value">${esc(String(data.count||0))}</div></div><div class="metric-box"><div class="metric-label">开始</div><div class="metric-value" style="font-size:16px">${esc(data.start||'')}</div></div><div class="metric-box"><div class="metric-label">结束</div><div class="metric-value" style="font-size:16px">${esc(data.end||'')}</div></div></div><div class="section-card"><div class="section-title">按天查看</div><div class="day-stack">${days||'<div class="hint">这一周还没有数据</div>'}</div></div>`}function renderReport(data){return `<div class="result-hero"><div class="result-kicker">weekly report</div><div class="result-title">周报已生成</div><div class="result-meta">统计区间：${esc(data.start||'')} 到 ${esc(data.end||'')} · 共 ${esc(String(data.count||0))} 条日报</div></div><div class="section-card"><div class="section-title">周报正文</div><div class="report-text">${esc(data.report||'')}</div></div>`}async function request(url,opt={}){const res=await fetch(url,{headers:{'Content-Type':'application/json'},...opt}),data=await res.json();if(!res.ok)throw new Error(data.detail||'请求失败');return data}document.getElementById('saveLog').addEventListener('click',async()=>{const date=document.getElementById('logDate').value,content=document.getElementById('logContent').value.trim(),result=document.getElementById('logResult');if(!content)return setState(result,'error','请先输入日报内容。');setState(result,'loading','正在保存日报...');try{const data=await request('/logs',{method:'POST',body:JSON.stringify({date,content})});result.className='output';result.innerHTML=renderLog(data.log)}catch(e){setState(result,'error',e.message)}});document.getElementById('fetchLog').addEventListener('click',async()=>{const date=document.getElementById('queryDate').value,result=document.getElementById('logResult');setState(result,'loading','正在读取日报...');try{const data=await request(`/logs?date=${date}`);result.className='output';result.innerHTML=renderDailyQuery(data)}catch(e){setState(result,'error',e.message)}});document.getElementById('fetchWeekly').addEventListener('click',async()=>{const start=document.getElementById('weekStart').value,end=document.getElementById('weekEnd').value,result=document.getElementById('weeklyResult');setState(result,'loading','正在聚合周数据...');try{const data=await request(`/weekly?start=${start}&end=${end}`);result.className='output';result.innerHTML=renderWeekly(data)}catch(e){setState(result,'error',e.message)}});document.getElementById('generateReport').addEventListener('click',async()=>{const start=document.getElementById('reportStart').value,end=document.getElementById('reportEnd').value,result=document.getElementById('reportResult');setState(result,'loading','正在生成周报...');try{const data=await request('/weekly-report',{method:'POST',body:JSON.stringify({start,end})});result.className='output';result.innerHTML=renderReport(data)}catch(e){setState(result,'error',e.message)}});
+const today = new Date().toISOString().slice(0, 10);
+['logDate','queryDate','weekStart','weekEnd','chatDate'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = today; });
+
+function getChatRange() {
+  return {
+    start: null,
+    end: null,
+  };
+}
+
+const esc = (v = '') => String(v)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
+function setState(el, state, text) {
+  el.className = `result ${state}`;
+  el.innerHTML = esc(text);
+}
+
+function bullets(items) {
+  if (!items || !items.length) return '<div class="hint">暂无内容</div>';
+  return `<ul class="list">${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+}
+
+function renderLog(log) {
+  const structured = log.structured || {};
+  return `
+    <div class="intent-box">
+      <h3 class="intent-name">${esc(structured.summary || '已保存日报')}</h3>
+      <div class="intent-meta">日期：${esc(log.date || '')} · 创建时间：${esc(log.created_at || '')} · 结构化来源：${esc(log.structured_by || '')}</div>
+    </div>
+    <div class="panel"><div class="panel-title">原始日报</div><div class="report">${esc(log.content || '')}</div></div>
+    <div class="stack">
+      <div class="panel"><div class="panel-title">完成事项</div>${bullets((structured.tasks || []).map((item) => item.title || ''))}</div>
+      <div class="panel"><div class="panel-title">风险与阻塞</div>${bullets(structured.blockers || [])}</div>
+      <div class="panel"><div class="panel-title">后续计划</div>${bullets(structured.plans || [])}</div>
+    </div>`;
+}
+
+function renderDailyQuery(data) {
+  if (!data.logs || !data.logs.length) {
+    return '<div class="intent-box"><h3 class="intent-name">这一天还没有日报</h3><div class="intent-meta">可以先去左侧保存一条。</div></div>';
+  }
+  return data.logs.map(renderLog).join('');
+}
+
+function renderWeekly(data) {
+  const days = (data.logs || []).map((log) => `
+    <div class="panel">
+      <div class="panel-title">${esc(log.date)}</div>
+      <div class="report">${esc((log.structured && log.structured.summary) || log.content || '')}</div>
+    </div>`).join('');
+  return `
+    <div class="intent-box">
+      <h3 class="intent-name">${esc(data.start || '')} → ${esc(data.end || '')}</h3>
+      <div class="intent-meta">共 ${esc(String(data.count || 0))} 条日报</div>
+    </div>
+    <div class="panel"><div class="panel-title">按天查看</div><div class="stack">${days || '<div class="hint">这一周还没有数据</div>'}</div></div>`;
+}
+
+function renderReport(data) {
+  return `
+    <div class="intent-box">
+      <h3 class="intent-name">周报已生成</h3>
+      <div class="intent-meta">统计区间：${esc(data.start || '')} 到 ${esc(data.end || '')} · 共 ${esc(String(data.count || 0))} 条日报</div>
+    </div>
+    <div class="panel"><div class="panel-title">周报正文</div><div class="report">${esc(data.report || '')}</div></div>`;
+}
+
+function renderIntent(intent) {
+  return `
+    <div class="intent-box">
+      <h3 class="intent-name">${esc(intent.intent || 'unknown')}</h3>
+      <div class="intent-meta">${esc(intent.reason || '没有识别到明确原因')}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">解析字段</div>
+      <div class="json">${esc(JSON.stringify(intent, null, 2))}</div>
+    </div>`;
+}
+
+function renderChatResponse(data) {
+  const result = data.result || {};
+  const blocks = [renderIntent(data.intent || {})];
+  if (result.message) {
+    blocks.push(`<div class="panel"><div class="panel-title">执行结果</div><div class="report">${esc(result.message)}</div></div>`);
+  }
+  if (result.log) {
+    blocks.push(renderLog(result.log));
+  }
+  if (result.logs) {
+    blocks.push(renderDailyQuery(result));
+  }
+  if (result.report) {
+    blocks.push(renderReport(result));
+  }
+  if (result.llm || result.provider) {
+    blocks.push(`<div class="panel"><div class="panel-title">LLM 调试</div><div class="json">${esc(JSON.stringify(result, null, 2))}</div></div>`);
+  }
+  if (result.command) {
+    blocks.push(`<div class="panel"><div class="panel-title">建议命令</div><div class="report">${esc(result.command)}</div></div>`);
+  }
+  if (result.examples) {
+    blocks.push(`<div class="panel"><div class="panel-title">示例</div>${bullets(result.examples)}</div>`);
+  }
+  return blocks.join('');
+}
+
+async function request(url, opt = {}) {
+  const res = await fetch(url, {
+    headers: {'Content-Type': 'application/json'},
+    ...opt,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || '请求失败');
+  return data;
+}
+
+const directResult = document.getElementById('directResult');
+const chatResult = document.getElementById('chatResult');
+const weeklyResult = document.getElementById('weeklyResult');
+
+async function sendChat(debugOnly = false) {
+  const message = document.getElementById('chatMessage').value.trim();
+  const action = document.getElementById('chatAction').value || null;
+  const date = document.getElementById('chatDate').value || null;
+  const { start, end } = getChatRange();
+  if (!message) {
+    setState(chatResult, 'error', '请先输入你的需求。');
+    return;
+  }
+  setState(chatResult, 'loading', debugOnly ? '正在识别意图...' : '正在发送给 Agent...');
+  try {
+    const data = await request('/chat', {method:'POST', body: JSON.stringify({message, action, date, start, end})});
+    chatResult.className = 'result';
+    chatResult.innerHTML = renderChatResponse(data);
+  } catch (e) {
+    setState(chatResult, 'error', e.message);
+  }
+}
+
+document.getElementById('saveLog').addEventListener('click', async () => {
+  const date = document.getElementById('logDate').value;
+  const content = document.getElementById('logContent').value.trim();
+  if (!content) return setState(directResult, 'error', '请先输入日报内容。');
+  setState(directResult, 'loading', '正在保存日报...');
+  try {
+    const data = await request('/logs', {method:'POST', body: JSON.stringify({date, content})});
+    directResult.className = 'result';
+    directResult.innerHTML = renderLog(data.log);
+  } catch (e) {
+    setState(directResult, 'error', e.message);
+  }
+});
+
+document.getElementById('fetchLog').addEventListener('click', async () => {
+  const date = document.getElementById('queryDate').value;
+  setState(directResult, 'loading', '正在读取日报...');
+  try {
+    const data = await request(`/logs?date=${date}`);
+    directResult.className = 'result';
+    directResult.innerHTML = renderDailyQuery(data);
+  } catch (e) {
+    setState(directResult, 'error', e.message);
+  }
+});
+
+document.getElementById('runChat').addEventListener('click', () => sendChat(false));
+document.getElementById('debugIntent').addEventListener('click', () => sendChat(true));
+
+function lastWeekRange() {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() + diffToMonday);
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(thisMonday.getDate() - 7);
+  const lastSunday = new Date(thisMonday);
+  lastSunday.setDate(thisMonday.getDate() - 1);
+  const toISO = (d) => d.toISOString().slice(0, 10);
+  return { start: toISO(lastMonday), end: toISO(lastSunday) };
+}
+
+function syncWeeklyDefaults() {
+  const range = lastWeekRange();
+  const weekStart = document.getElementById('weekStart');
+  const weekEnd = document.getElementById('weekEnd');
+  if (weekStart && !weekStart.dataset.manual) weekStart.value = range.start;
+  if (weekEnd && !weekEnd.dataset.manual) weekEnd.value = range.end;
+}
+
+['weekStart','weekEnd'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => { el.dataset.manual = '1'; });
+});
+syncWeeklyDefaults();
+
+async function fetchWeeklyReport(mode = 'data') {
+  const range = lastWeekRange();
+  const start = range.start;
+  const end = range.end;
+  setState(weeklyResult, 'loading', mode === 'data' ? '正在聚合上个周一到周日的数据...' : '正在生成上个周一到周日的周报...');
+  try {
+    if (mode === 'data') {
+      const data = await request(`/weekly?start=${start}&end=${end}`);
+      weeklyResult.className = 'result';
+      weeklyResult.innerHTML = renderWeekly(data);
+    } else {
+      const data = await request('/weekly-report', {method:'POST', body: JSON.stringify({start, end})});
+      weeklyResult.className = 'result';
+      weeklyResult.innerHTML = renderReport(data);
+    }
+  } catch (e) {
+    setState(weeklyResult, 'error', e.message);
+  }
+}
+
+document.getElementById('fetchWeekly').addEventListener('click', () => fetchWeeklyReport('data'));
+
+document.getElementById('generateReport').addEventListener('click', () => fetchWeeklyReport('report'));
 </script>
 </body>
 </html>

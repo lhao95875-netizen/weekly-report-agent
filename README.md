@@ -1,21 +1,23 @@
 # Weekly Report Agent
 
-基于 **FastAPI + LangChain + 阿里云 Qwen** 的智能周报 Agent。项目支持自然语言日报录入、结构化任务抽取、周维度聚合、周报自动生成，并内置 eval harness 用于评估 `tasks / blockers / plans` 抽取质量。
+基于 **FastAPI + LangChain + 阿里云 Qwen** 的智能周报 Agent。项目支持自然语言日报录入、聊天式意图识别、结构化任务抽取、周维度聚合、周报自动生成，并内置 eval harness 用于评估 `tasks / blockers / plans` 抽取质量。
 
 ## 功能特性
 
 - 自然语言日报录入
 - 基于 LangChain 接入阿里云 DashScope / Qwen
 - 使用 Pydantic structured output 约束模型输出结构
+- 聊天式意图识别，支持保存日报、查询日报、周数据、周报、eval、LLM 调试
 - 自动抽取 `tasks`、`blockers`、`plans`
-- 模型失败时回退本地规则解析
+- 意图识别优先走 LLM，失败时回退本地规则
+- 结构化分解优先走 LLM，失败时回退本地规则
 - 按日期查询日报
-- 按周聚合日报数据
+- 周数据和周报默认自动使用上个周一到周日
 - 一键生成中文周报
 - 内置 eval harness，评估结构化抽取的 recall / precision
-- 支持 eval 质量门禁，不达标时返回非零退出码
+- 默认启用 eval 质量门禁，不达标时返回非零退出码
 - 支持 JSON eval 报告输出
-- 提供简单 Web 页面入口
+- 提供支持日报直录与聊天式调试的 Web 页面入口
 
 ## 技术栈
 
@@ -123,9 +125,16 @@ $env:DASHSCOPE_API_KEY="你的阿里云百炼 API Key"
 
 ### 3. 启动服务
 
-```bash
+PowerShell 示例：
+
+```powershell
+$env:ALIYUN_API_KEY="你的阿里云百炼 API Key"
+$env:ALIYUN_MODEL="qwen-plus"
+$env:ALIYUN_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 uvicorn app:app --reload
 ```
+
+如果你只想先跑本地规则和前端，也可以不配置 API Key，但意图识别与结构化分解就会更多依赖回退逻辑。
 
 打开浏览器访问：
 
@@ -137,11 +146,55 @@ http://127.0.0.1:8000
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| `POST` | `/chat` | 自然语言 Agent 入口，自动识别意图并调用工具 |
 | `POST` | `/logs` | 新增日报并自动结构化 |
 | `GET` | `/logs?date=2026-04-04` | 查看某天日报 |
-| `GET` | `/weekly?start=2026-03-30&end=2026-04-05` | 查看周数据 |
+| `GET` | `/weekly?start=2026-03-30&end=2026-04-05` | 查看周数据（聊天式入口默认自动取上个周一到周日） |
 | `POST` | `/weekly-report` | 生成周报 |
 | `GET` | `/debug/llm` | 检查 LLM 配置和调用状态 |
+
+## Agent Chat 入口
+
+`/chat` 是项目的自然语言 Agent 入口。用户不需要直接记住每个 REST API，可以用一句话表达目标，系统会先识别意图，再调用对应工具。
+
+当前支持的意图：
+
+| intent | 说明 | 对应工具 |
+|---|---|---|
+| `create_log` | 保存日报 | `tool_create_log` |
+| `get_daily_log` | 查询某天日报 | `tool_get_daily_log` |
+| `get_weekly_data` | 查询周数据 | `tool_get_weekly_data` |
+| `get_weekly_report` | 生成周报 | `tool_create_weekly_report` |
+| `run_eval` | 返回 eval harness 运行命令 | `tool_run_eval` |
+| `debug_llm` | 检查 LLM 状态 | `/debug/llm` |
+
+`/chat` 的返回里会同时包含 `intent` 和 `result`，方便你判断是意图识别错误、工具执行失败，还是 LLM 配置问题。
+
+示例：保存今天日报。
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"帮我保存今天日报：完成 README 展示优化，新增 eval 示例报告，明天开始接入 LangGraph"}'
+```
+
+示例：生成本周周报。
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"帮我生成本周周报"}'
+```
+
+示例：运行 eval harness。
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"运行 eval harness"}'
+```
+
+返回结构会包含识别到的 `intent` 和工具执行 `result`，便于调试 Agent 路由行为。
 
 ## 日报结构化流程
 
@@ -187,13 +240,23 @@ structured_by = local
 
 ## Eval Harness
 
-项目内置结构化评估脚本，用于评估模型对 `tasks`、`blockers`、`plans` 的抽取质量，并支持质量门禁和 JSON 报告输出。
+项目内置结构化评估脚本，用于评估模型对 `tasks`、`blockers`、`plans` 的抽取质量，并默认启用质量门禁和 JSON 报告输出。
+
+当前脚本的门禁默认值是：
+
+- `--min-recall 0.85`
+- `--min-precision 0.85`
+- `--max-local-rate 0.20`
+
+如果想只看详细结果而不写文件，可以直接运行：
 
 基础运行：
 
 ```bash
 python scripts/eval_structuring.py
 ```
+
+运行时会自动应用默认门禁；如果指标未达标，脚本会返回非零退出码，适合接 CI 或发布前检查。
 
 查看详细结果：
 
@@ -321,7 +384,7 @@ reports/eval-latest.json
 
 - 增加 `postprocess_structured_log`，进一步修正模型误分类
 - 扩展 eval cases 到 30-50 条
-- 增加 `/chat` 自然语言入口和 tool layer
+- 增强 `/chat` 自然语言入口和 tool layer
 - 使用 LangGraph 管理多步骤 Agent 工作流
 - 接入向量检索，实现历史日报/周报记忆
 - 接入 GitHub Actions，让 eval harness 成为 CI 质量门禁

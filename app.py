@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +58,26 @@ class WeeklyReportCreate(BaseModel):
     end: str = Field(description="周结束日期")
 
 
+class ChatRequest(BaseModel):
+    message: str = Field(description="用户自然语言请求")
+    action: str | None = Field(default=None, description="可选显式动作，例如 create_log、get_weekly_report、run_eval")
+    date: str | None = Field(default=None, description="可选日期，格式 YYYY-MM-DD")
+    start: str | None = Field(default=None, description="可选开始日期，格式 YYYY-MM-DD")
+    end: str | None = Field(default=None, description="可选结束日期，格式 YYYY-MM-DD")
+
+
+class ChatIntent(BaseModel):
+    intent: str = Field(
+        description="意图类型，只能是 create_log、get_daily_log、get_weekly_report、get_weekly_data、run_eval、debug_llm、unknown"
+    )
+    date: str | None = Field(default=None, description="日报日期，格式 YYYY-MM-DD")
+    start: str | None = Field(default=None, description="周报开始日期，格式 YYYY-MM-DD")
+    end: str | None = Field(default=None, description="周报结束日期，格式 YYYY-MM-DD")
+    content: str | None = Field(default=None, description="需要保存的日报正文")
+    reason: str = Field(default="", description="简要说明为什么选择该意图")
+    resolved_by: str = Field(default="rules", description="意图由 rules 还是 llm 解析得到")
+
+
 class StructuredTask(BaseModel):
     title: str = Field(description="任务标题，保留原始工作事项的核心表达")
     status: str = Field(default="done", description="任务状态，已完成用 done，推进中用 doing")
@@ -95,6 +115,168 @@ def parse_date(value: str) -> date:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="日期格式必须是 YYYY-MM-DD") from exc
+
+
+def today_str() -> str:
+    return date.today().isoformat()
+
+
+def current_week_range() -> tuple[str, str]:
+    today = date.today()
+    start = today - timedelta(days=today.weekday())
+    end = start + timedelta(days=6)
+    return start.isoformat(), end.isoformat()
+
+
+def last_week_range() -> tuple[str, str]:
+    today = date.today()
+    this_monday = today - timedelta(days=today.weekday())
+    last_monday = this_monday - timedelta(days=7)
+    last_sunday = this_monday - timedelta(days=1)
+    return last_monday.isoformat(), last_sunday.isoformat()
+
+
+def extract_iso_date(text: str) -> str | None:
+    match = re.search(r"\d{4}-\d{2}-\d{2}", text)
+    return match.group(0) if match else None
+
+
+def extract_date_range(text: str) -> tuple[str | None, str | None]:
+    dates = re.findall(r"\d{4}-\d{2}-\d{2}", text)
+    if len(dates) >= 2:
+        return dates[0], dates[1]
+    return None, None
+
+
+def strip_chat_command_prefix(message: str) -> str:
+    text = message.strip()
+    patterns = [
+        r"^帮我保存(?:今天|昨日|昨天)?日报[:：，,\s]*",
+        r"^保存(?:今天|昨日|昨天)?日报[:：，,\s]*",
+        r"^记录(?:今天|昨日|昨天)?日报[:：，,\s]*",
+        r"^新增(?:今天|昨日|昨天)?日报[:：，,\s]*",
+        r"^日报[:：，,\s]*",
+    ]
+    for pattern in patterns:
+        text = re.sub(pattern, "", text)
+    return text.strip() or message.strip()
+
+
+def is_eval_command(message: str) -> bool:
+    lowered = message.lower().strip()
+    eval_patterns = [
+        r"^(run|执行|运行|跑)\s*eval(?:\s+harness)?$",
+        r"^(run|执行|运行|跑)\s*harness$",
+        r"^(执行|运行|跑).*(结构化)?评估$",
+        r"^(执行|运行|跑).*质量门禁$",
+        r"^eval\s+harness$",
+    ]
+    return any(re.search(pattern, lowered) for pattern in eval_patterns)
+
+
+def infer_chat_intent_by_rules(payload: ChatRequest) -> ChatIntent:
+    message = payload.message.strip()
+    lowered = message.lower()
+    action = (payload.action or "").strip().lower()
+    start_from_text, end_from_text = extract_date_range(message)
+    date_from_text = extract_iso_date(message)
+
+    start = payload.start or start_from_text
+    end = payload.end or end_from_text
+    if not start or not end:
+        if any(token in message for token in ["本周", "这周", "周报", "weekly"]):
+            default_start, default_end = current_week_range()
+            start = start or default_start
+            end = end or default_end
+
+    target_date = payload.date or date_from_text
+    if not target_date and any(token in message for token in ["今天", "今日"]):
+        target_date = today_str()
+    if not target_date and any(token in message for token in ["昨天", "昨日"]):
+        target_date = (date.today() - timedelta(days=1)).isoformat()
+
+    if action in {"create_log", "save_log", "log"}:
+        return ChatIntent(
+            intent="create_log",
+            date=target_date or today_str(),
+            content=strip_chat_command_prefix(message),
+            reason="用户显式指定保存日报动作",
+            resolved_by="rules",
+        )
+    if action in {"get_daily_log", "query_log"}:
+        return ChatIntent(
+            intent="get_daily_log",
+            date=target_date or today_str(),
+            reason="用户显式指定查询日报动作",
+            resolved_by="rules",
+        )
+    if action in {"get_weekly_report", "weekly_report"}:
+        default_start, default_end = last_week_range()
+        return ChatIntent(
+            intent="get_weekly_report",
+            start=start or default_start,
+            end=end or default_end,
+            reason="用户显式指定生成周报动作",
+            resolved_by="rules",
+        )
+    if action in {"get_weekly_data", "weekly_data"}:
+        default_start, default_end = last_week_range()
+        return ChatIntent(
+            intent="get_weekly_data",
+            start=start or default_start,
+            end=end or default_end,
+            reason="用户显式指定查询周数据动作",
+            resolved_by="rules",
+        )
+    if action == "run_eval":
+        return ChatIntent(intent="run_eval", reason="用户显式指定运行结构化评估", resolved_by="rules")
+    if action == "debug_llm":
+        return ChatIntent(intent="debug_llm", reason="用户显式指定检查 LLM 状态", resolved_by="rules")
+
+    if any(token in message for token in ["保存", "记录", "新增", "写入", "帮我保存"]):
+        return ChatIntent(
+            intent="create_log",
+            date=target_date or today_str(),
+            content=strip_chat_command_prefix(message),
+            reason="用户请求保存日报",
+            resolved_by="rules",
+        )
+
+    if any(token in message for token in ["查看日报", "查询日报", "看看日报", "今天日报", "昨天日报"]):
+        return ChatIntent(
+            intent="get_daily_log",
+            date=target_date or today_str(),
+            reason="用户请求查询日报",
+            resolved_by="rules",
+        )
+
+    if is_eval_command(message):
+        return ChatIntent(intent="run_eval", reason="用户请求运行结构化评估", resolved_by="rules")
+
+    if any(token in message for token in ["调试", "健康检查", "检查模型", "检查LLM", "检查 llm"]):
+        return ChatIntent(intent="debug_llm", reason="用户请求检查 LLM 状态", resolved_by="rules")
+
+    if any(token in message for token in ["生成周报", "写周报", "周报"]):
+        default_start, default_end = last_week_range()
+        return ChatIntent(
+            intent="get_weekly_report",
+            start=start or default_start,
+            end=end or default_end,
+            reason="用户请求生成周报",
+            resolved_by="rules",
+        )
+
+    if any(token in message for token in ["周数据", "本周数据", "这周数据", "查看本周"]):
+        default_start, default_end = last_week_range()
+        return ChatIntent(
+            intent="get_weekly_data",
+            start=start or default_start,
+            end=end or default_end,
+            reason="用户请求查看周数据",
+            resolved_by="rules",
+        )
+
+    return ChatIntent(intent="unknown", reason="规则无法识别明确意图", resolved_by="rules")
 
 
 def split_log_items(raw_text: str) -> list[str]:
@@ -419,6 +601,126 @@ async def generate_weekly_summary(start: str, end: str, logs: list[dict[str, Any
     return local_weekly_summary(start, end, logs)
 
 
+async def parse_chat_intent(payload: ChatRequest) -> ChatIntent:
+    llm = get_langchain_llm(temperature=0)
+    if llm:
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "你是周报 Agent 的意图识别器。请把用户请求解析为固定 schema。"
+                    "intent 只能是 create_log、get_daily_log、get_weekly_report、get_weekly_data、run_eval、debug_llm、unknown。"
+                    "如果用户要保存/记录/新增日报，intent=create_log，并把日报正文放入 content。"
+                    "如果用户要查询某天日报，intent=get_daily_log。"
+                    "如果用户要生成周报，intent=get_weekly_report。"
+                    "如果用户要查看周数据但不要求生成报告，intent=get_weekly_data。"
+                    "如果用户要运行 eval/harness/质量评估，intent=run_eval。"
+                    "如果用户要检查 LLM 状态，intent=debug_llm。"
+                    "日期必须使用 YYYY-MM-DD；如果无法判断日期可留空。不要编造用户没有表达的日报正文。",
+                ),
+                (
+                    "human",
+                    "用户请求：{message}\n可选 date={date}\n可选 start={start}\n可选 end={end}",
+                ),
+            ]
+        )
+        structured_llm = llm.with_structured_output(ChatIntent)
+        chain = prompt | structured_llm
+        try:
+            parsed = await asyncio.wait_for(
+                chain.ainvoke(
+                    {
+                        "message": payload.message,
+                        "date": payload.date,
+                        "start": payload.start,
+                        "end": payload.end,
+                    }
+                ),
+                timeout=10.0,
+            )
+        except Exception as exc:
+            record_llm_error("chat_intent", exc)
+        else:
+            if parsed.intent == "create_log":
+                parsed.date = parsed.date or payload.date or extract_iso_date(payload.message) or today_str()
+                parsed.content = parsed.content or strip_chat_command_prefix(payload.message)
+            elif parsed.intent == "get_daily_log":
+                parsed.date = parsed.date or payload.date or extract_iso_date(payload.message) or today_str()
+            elif parsed.intent in {"get_weekly_report", "get_weekly_data"}:
+                default_start, default_end = last_week_range()
+                parsed.start = parsed.start or payload.start or default_start
+                parsed.end = parsed.end or payload.end or default_end
+            parsed.resolved_by = "llm"
+            return parsed
+
+    rule_intent = infer_chat_intent_by_rules(payload)
+    rule_intent.resolved_by = "rules"
+    return rule_intent
+
+
+async def tool_create_log(date_value: str, content: str) -> dict[str, Any]:
+    parse_date(date_value)
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="保存日报需要提供日报内容")
+
+    logs = load_logs()
+    structured, structured_by = await to_structured_log(content)
+    new_log = {
+        "date": date_value,
+        "content": content,
+        "structured": structured,
+        "structured_by": structured_by,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    logs.append(new_log)
+    save_logs(logs)
+    return {"message": "日报已保存", "log": new_log}
+
+
+def tool_get_daily_log(date_value: str) -> dict[str, Any]:
+    parse_date(date_value)
+    logs = filter_logs_by_date(load_logs(), date_value)
+    return {"date": date_value, "logs": logs}
+
+
+def tool_get_weekly_data(start: str, end: str) -> dict[str, Any]:
+    logs = filter_logs_by_range(load_logs(), start, end)
+    return {
+        "start": start,
+        "end": end,
+        "count": len(logs),
+        "logs": logs,
+    }
+
+
+async def tool_create_weekly_report(start: str, end: str) -> dict[str, Any]:
+    weekly_data = tool_get_weekly_data(start, end)
+    report = await generate_weekly_summary(start, end, weekly_data["logs"])
+    return {
+        "start": start,
+        "end": end,
+        "count": weekly_data["count"],
+        "report": report,
+        "logs": weekly_data["logs"],
+    }
+
+
+def tool_run_eval() -> dict[str, Any]:
+    return {
+        "message": "请在终端运行 eval harness，以避免 Web 请求中触发长时间 LLM 批量调用。",
+        "command": "python scripts/eval_structuring.py --details --min-recall 0.85 --min-precision 0.85 --max-local-rate 0.20 --output reports/eval-latest.json",
+        "supported_metrics": [
+            "avg_recall",
+            "avg_precision",
+            "structured_rate",
+            "local_fallback_rate",
+            "label_metrics.tasks",
+            "label_metrics.blockers",
+            "label_metrics.plans",
+        ],
+    }
+
+
 @app.get("/debug/llm")
 async def debug_llm() -> dict[str, Any]:
     config = get_aliyun_config()
@@ -430,6 +732,7 @@ async def debug_llm() -> dict[str, Any]:
             "ALIYUN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
         ),
         "recent_errors": LAST_LLM_ERRORS,
+        "note": "意图识别优先走规则兜底，LLM 只在规则无法明确判断时参与",
     }
     if not config:
         info["llm"] = "skipped: ALIYUN_API_KEY or DASHSCOPE_API_KEY is missing"
@@ -453,47 +756,58 @@ def index() -> FileResponse:
 
 @app.post("/logs")
 async def create_log(payload: LogCreate) -> dict[str, Any]:
-    parse_date(payload.date)
-    logs = load_logs()
-    structured, structured_by = await to_structured_log(payload.content)
-    new_log = {
-        "date": payload.date,
-        "content": payload.content,
-        "structured": structured,
-        "structured_by": structured_by,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    logs.append(new_log)
-    save_logs(logs)
-    return {"message": "日报已保存", "log": new_log}
+    return await tool_create_log(payload.date, payload.content)
 
 
 @app.get("/logs")
 def get_logs(date: str) -> dict[str, Any]:
-    parse_date(date)
-    logs = filter_logs_by_date(load_logs(), date)
-    return {"date": date, "logs": logs}
+    return tool_get_daily_log(date)
 
 
 @app.get("/weekly")
 def get_weekly(start: str, end: str) -> dict[str, Any]:
-    logs = filter_logs_by_range(load_logs(), start, end)
-    return {
-        "start": start,
-        "end": end,
-        "count": len(logs),
-        "logs": logs,
-    }
+    return tool_get_weekly_data(start, end)
 
 
 @app.post("/weekly-report")
 async def create_weekly_report(payload: WeeklyReportCreate) -> dict[str, Any]:
-    logs = filter_logs_by_range(load_logs(), payload.start, payload.end)
-    report = await generate_weekly_summary(payload.start, payload.end, logs)
+    return await tool_create_weekly_report(payload.start, payload.end)
+
+
+@app.post("/chat")
+async def chat(payload: ChatRequest) -> dict[str, Any]:
+    if not payload.message.strip():
+        raise HTTPException(status_code=400, detail="message 不能为空")
+
+    intent = await parse_chat_intent(payload)
+    result: dict[str, Any]
+
+    if intent.intent == "create_log":
+        result = await tool_create_log(intent.date or today_str(), intent.content or payload.message)
+    elif intent.intent == "get_daily_log":
+        result = tool_get_daily_log(intent.date or today_str())
+    elif intent.intent == "get_weekly_report":
+        start, end = last_week_range()
+        result = await tool_create_weekly_report(start, end)
+    elif intent.intent == "get_weekly_data":
+        start, end = last_week_range()
+        result = tool_get_weekly_data(start, end)
+    elif intent.intent == "run_eval":
+        result = tool_run_eval()
+    elif intent.intent == "debug_llm":
+        result = await debug_llm()
+    else:
+        result = {
+            "message": "暂时无法识别你的请求。你可以说：保存今天日报、查询今天日报、生成本周周报、运行 eval。",
+            "examples": [
+                "帮我保存今天日报：完成 README 优化，明天接入 LangGraph",
+                "查询今天日报",
+                "生成本周周报",
+                "运行 eval harness",
+            ],
+        }
+
     return {
-        "start": payload.start,
-        "end": payload.end,
-        "count": len(logs),
-        "report": report,
-        "logs": logs,
+        "intent": intent.model_dump(),
+        "result": result,
     }

@@ -199,9 +199,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--details", action="store_true", help="Print per-case details.")
     parser.add_argument("--json", action="store_true", help="Print full JSON report.")
     parser.add_argument("--output", type=Path, help="Path to save JSON report.")
-    parser.add_argument("--min-recall", type=float, help="Minimum allowed average recall, e.g. 0.85.")
-    parser.add_argument("--min-precision", type=float, help="Minimum allowed average precision, e.g. 0.85.")
-    parser.add_argument("--max-local-rate", type=float, help="Maximum allowed local fallback rate, e.g. 0.2.")
+    parser.add_argument("--min-recall", type=float, default=0.85, help="Minimum allowed average recall, e.g. 0.85.")
+    parser.add_argument("--min-precision", type=float, default=0.85, help="Minimum allowed average precision, e.g. 0.85.")
+    parser.add_argument("--max-local-rate", type=float, default=0.2, help="Maximum allowed local fallback rate, e.g. 0.2.")
     return parser.parse_args()
 
 
@@ -220,7 +220,9 @@ def main() -> None:
         if args.output:
             print(f"\nSaved JSON report to: {args.output}")
 
-    if report["quality_gate"]["enabled"] and not report["quality_gate"]["passed"]:
+    if report["quality_gate"]["enabled"]:
+        if report["quality_gate"]["passed"]:
+            sys.exit(0)
         sys.exit(1)
 
 
