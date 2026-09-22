@@ -18,6 +18,7 @@
       <div class="badges">
         <span class="badge">日报保存</span>
         <span class="badge">意图识别</span>
+        <span class="badge">Git 提交采集</span>
         <span class="badge">周报生成</span>
         <span class="badge">Eval 调试</span>
       </div>
@@ -51,7 +52,7 @@
       <div class="sub">输入一句自然语言需求，让系统先识别 intent，再返回实际调用结果和调试信息。</div>
       <div class="field"><label for="chatMessage">输入你的需求</label><textarea id="chatMessage" placeholder="例如：帮我保存今天日报：完成 README 展示优化，明天接入 LangGraph；或者：运行 eval harness；或者：生成本周周报"></textarea></div>
       <div class="form-grid">
-        <div class="field"><label for="chatAction">显式动作（可选）</label><select id="chatAction"><option value="">自动识别</option><option value="create_log">保存日报</option><option value="get_daily_log">查询日报</option><option value="get_weekly_data">查看周数据</option><option value="get_weekly_report">生成周报</option><option value="run_eval">运行 eval</option><option value="debug_llm">检查 LLM</option></select></div>
+        <div class="field"><label for="chatAction">显式动作（可选）</label><select id="chatAction"><option value="">自动识别</option><option value="create_log">保存日报</option><option value="get_daily_log">查询日报</option><option value="get_weekly_data">查看周数据</option><option value="get_weekly_report">生成周报</option><option value="get_git_commits">查看 git 提交</option><option value="run_eval">运行 eval</option><option value="debug_llm">检查 LLM</option></select></div>
         <div class="field"><label for="chatDate">日期（可选）</label><input id="chatDate" type="date" /></div>
       </div>
       <div class="hint">周报和周数据默认自动使用上个周一到周日，不再需要手动填写开始/结束日期。</div>
@@ -99,10 +100,45 @@
       </div>
     </div>
   </section>
+
+  <section class="layout" style="margin-top:22px">
+    <div class="card" id="git">
+      <h2>Git 提交采集</h2>
+      <div class="sub">自动扫描 config.json 中 git.scan_dir 下的所有仓库，按当前 git 用户收集这一周的提交，作为周报素材。</div>
+      <div class="form-grid">
+        <div class="field"><label for="gitStart">开始日期</label><input id="gitStart" type="date" /></div>
+        <div class="field"><label for="gitEnd">结束日期</label><input id="gitEnd" type="date" /></div>
+      </div>
+      <div class="toolbar">
+        <button class="button" id="fetchGit">采集这段时间的提交</button>
+      </div>
+      <div id="gitResult" class="result empty">这里会显示各仓库的提交记录。</div>
+    </div>
+
+    <div class="card">
+      <h2>周报数据来源</h2>
+      <div class="sub">生成周报时会自动融合三类材料，缺哪一类都不影响其余部分。</div>
+      <div class="metrics">
+        <div class="metric"><b>1</b><span>日报结构化</span></div>
+        <div class="metric"><b>2</b><span>Git 提交</span></div>
+        <div class="metric"><b>3</b><span>上周计划闭环</span></div>
+      </div>
+      <div style="margin-top:16px" class="stack">
+        <div class="panel">
+          <div class="panel-title">配置扫描目录</div>
+          <div class="hint">复制 config.example.json 为 config.json，把 git.scan_dir 改成你的仓库根目录；也可用环境变量 WEEKLY_GIT_SCAN_DIR 覆盖。</div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">采集不到提交？</div>
+          <div class="hint">检查扫描目录是否正确、作者是否匹配（git config user.name）、目标周内是否真的有提交。作者身份可写成正则匹配多个。</div>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 <script>
 const today = new Date().toISOString().slice(0, 10);
-['logDate','queryDate','weekStart','weekEnd','chatDate'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = today; });
+['logDate','queryDate','weekStart','weekEnd','chatDate','gitStart','gitEnd'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = today; });
 
 function getChatRange() {
   return {
@@ -164,13 +200,59 @@ function renderWeekly(data) {
     <div class="panel"><div class="panel-title">按天查看</div><div class="stack">${days || '<div class="hint">这一周还没有数据</div>'}</div></div>`;
 }
 
+function renderGitSummary(git) {
+  if (!git) return '';
+  const meta = git.configured
+    ? `扫描目录：${git.scan_dir || ''} · 作者：${git.author || ''} · 有提交仓库 ${git.active_repos || 0}/${git.scanned_repos || 0} · 提交 ${git.total_commits || 0} 条`
+    : '未配置 git 扫描目录，本次周报只使用日报数据。';
+  return `<div class="panel"><div class="panel-title">Git 提交素材</div><div class="report">${esc(meta)}</div></div>`;
+}
+
+function renderPlanFollowup(followup) {
+  if (!followup || !followup.has_plans) return '';
+  const completed = (followup.completed_plans || []).map((item) => (
+    item.matched_item ? `${item.plan} → ${item.matched_item}` : item.plan
+  ));
+  const missed = (followup.missed_plans || []).map((item) => item.plan);
+  return `
+    <div class="panel">
+      <div class="panel-title">上周计划回顾</div>
+      <div class="hint" style="margin-top:8px">已完成或推进</div>
+      ${bullets(completed)}
+      <div class="hint" style="margin-top:8px">未完成</div>
+      ${bullets(missed)}
+      <div class="hint" style="margin-top:8px">本周新增工作</div>
+      ${bullets(followup.new_work || [])}
+    </div>`;
+}
+
+function renderGitCommits(data) {
+  const repos = data.repos || [];
+  const blocks = repos.map((repo) => `
+    <div class="panel">
+      <div class="panel-title">${esc(repo.repo)} · ${esc(String(repo.commit_count || 0))} 次提交</div>
+      ${bullets((repo.commits || []).map((item) => `${item.date} ${item.message}`))}
+    </div>`).join('');
+  const meta = data.configured
+    ? `${data.start || ''} → ${data.end || ''} · ${data.scan_dir || ''} · ${data.author || ''}`
+    : (data.message || '未配置 git 扫描目录');
+  return `
+    <div class="intent-box">
+      <h3 class="intent-name">共 ${esc(String(data.total_commits || 0))} 条提交</h3>
+      <div class="intent-meta">${esc(meta)}</div>
+    </div>
+    ${blocks || '<div class="hint">这段时间内没有匹配到提交。</div>'}`;
+}
+
 function renderReport(data) {
   return `
     <div class="intent-box">
       <h3 class="intent-name">周报已生成</h3>
       <div class="intent-meta">统计区间：${esc(data.start || '')} 到 ${esc(data.end || '')} · 共 ${esc(String(data.count || 0))} 条日报</div>
     </div>
-    <div class="panel"><div class="panel-title">周报正文</div><div class="report">${esc(data.report || '')}</div></div>`;
+    <div class="panel"><div class="panel-title">周报正文</div><div class="report">${esc(data.report || '')}</div></div>
+    ${renderGitSummary(data.git)}
+    ${renderPlanFollowup(data.plan_followup)}`;
 }
 
 function renderIntent(intent) {
@@ -225,6 +307,7 @@ async function request(url, opt = {}) {
 const directResult = document.getElementById('directResult');
 const chatResult = document.getElementById('chatResult');
 const weeklyResult = document.getElementById('weeklyResult');
+const gitResult = document.getElementById('gitResult');
 
 async function sendChat(debugOnly = false) {
   const message = document.getElementById('chatMessage').value.trim();
@@ -290,13 +373,17 @@ function lastWeekRange() {
 
 function syncWeeklyDefaults() {
   const range = lastWeekRange();
-  const weekStart = document.getElementById('weekStart');
-  const weekEnd = document.getElementById('weekEnd');
-  if (weekStart && !weekStart.dataset.manual) weekStart.value = range.start;
-  if (weekEnd && !weekEnd.dataset.manual) weekEnd.value = range.end;
+  ['weekStart', 'gitStart'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.manual) el.value = range.start;
+  });
+  ['weekEnd', 'gitEnd'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.manual) el.value = range.end;
+  });
 }
 
-['weekStart','weekEnd'].forEach((id) => {
+['weekStart','weekEnd','gitStart','gitEnd'].forEach((id) => {
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener('input', () => { el.dataset.manual = '1'; });
@@ -326,6 +413,19 @@ async function fetchWeeklyReport(mode = 'data') {
 document.getElementById('fetchWeekly').addEventListener('click', () => fetchWeeklyReport('data'));
 
 document.getElementById('generateReport').addEventListener('click', () => fetchWeeklyReport('report'));
+
+document.getElementById('fetchGit').addEventListener('click', async () => {
+  const start = document.getElementById('gitStart').value;
+  const end = document.getElementById('gitEnd').value;
+  setState(gitResult, 'loading', '正在扫描仓库并收集提交...');
+  try {
+    const data = await request(`/git/commits?start=${start}&end=${end}`);
+    gitResult.className = 'result';
+    gitResult.innerHTML = renderGitCommits(data);
+  } catch (e) {
+    setState(gitResult, 'error', e.message);
+  }
+});
 </script>
 </body>
 </html>

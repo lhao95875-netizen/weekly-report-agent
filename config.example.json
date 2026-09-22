@@ -1,0 +1,19 @@
+{
+  "git": {
+    "scan_dir": "改成你的仓库根目录，例如 D:/code 或 ~/projects",
+    "max_depth": 3,
+    "author": "留空自动读取 git 全局 user.name；也可写正则匹配多个身份，例如 zhangsan|zhangsan@company.com",
+    "exclude_dirs": [
+      "node_modules",
+      ".venv",
+      "venv",
+      "__pycache__",
+      "dist",
+      "build",
+      ".cache",
+      ".tox",
+      "site-packages",
+      ".trash"
+    ]
+  }
+}

@@ -14,6 +14,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from git_collector import collect_weekly_commits, render_git_commits_text
+from plan_tracker import (
+    build_plan_followup,
+    previous_week_range,
+    render_plan_followup_text,
+)
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "data" / "logs.json"
 STATIC_DIR = BASE_DIR / "static"
@@ -56,6 +63,8 @@ class LogCreate(BaseModel):
 class WeeklyReportCreate(BaseModel):
     start: str = Field(description="周开始日期")
     end: str = Field(description="周结束日期")
+    include_git: bool = Field(default=True, description="是否自动采集 scan_dir 下各仓库的 git 提交作为周报素材")
+    include_followup: bool = Field(default=True, description="是否自动对比上周计划的完成情况")
 
 
 class ChatRequest(BaseModel):
@@ -68,7 +77,7 @@ class ChatRequest(BaseModel):
 
 class ChatIntent(BaseModel):
     intent: str = Field(
-        description="意图类型，只能是 create_log、get_daily_log、get_weekly_report、get_weekly_data、run_eval、debug_llm、unknown"
+        description="意图类型，只能是 create_log、get_daily_log、get_weekly_report、get_weekly_data、get_git_commits、run_eval、debug_llm、unknown"
     )
     date: str | None = Field(default=None, description="日报日期，格式 YYYY-MM-DD")
     start: str | None = Field(default=None, description="周报开始日期，格式 YYYY-MM-DD")
@@ -232,6 +241,25 @@ def infer_chat_intent_by_rules(payload: ChatRequest) -> ChatIntent:
         return ChatIntent(intent="run_eval", reason="用户显式指定运行结构化评估", resolved_by="rules")
     if action == "debug_llm":
         return ChatIntent(intent="debug_llm", reason="用户显式指定检查 LLM 状态", resolved_by="rules")
+    if action in {"get_git_commits", "git_commits"}:
+        default_start, default_end = last_week_range()
+        return ChatIntent(
+            intent="get_git_commits",
+            start=start or default_start,
+            end=end or default_end,
+            reason="用户显式指定查看 git 提交",
+            resolved_by="rules",
+        )
+
+    if any(token in lowered for token in ["git提交", "git 提交", "git log", "提交记录", "代码提交", "commit记录", "git commits"]):
+        default_start, default_end = last_week_range()
+        return ChatIntent(
+            intent="get_git_commits",
+            start=start or default_start,
+            end=end or default_end,
+            reason="用户请求查看 git 提交记录",
+            resolved_by="rules",
+        )
 
     if any(token in message for token in ["保存", "记录", "新增", "写入", "帮我保存"]):
         return ChatIntent(
@@ -538,8 +566,14 @@ def filter_logs_by_range(logs: list[dict[str, Any]], start: str, end: str) -> li
     return result
 
 
-def local_weekly_summary(start: str, end: str, logs: list[dict[str, Any]]) -> str:
-    if not logs:
+def local_weekly_summary(
+    start: str,
+    end: str,
+    logs: list[dict[str, Any]],
+    git_text: str = "",
+    followup_text: str = "",
+) -> str:
+    if not logs and not git_text:
         return f"{start} 到 {end} 暂无日报记录。"
 
     done_items: list[str] = []
@@ -556,34 +590,64 @@ def local_weekly_summary(start: str, end: str, logs: list[dict[str, Any]]) -> st
         for plan in structured.get("plans", []):
             next_items.append(f"- {plan}")
 
+    if git_text:
+        done_items.append(git_text)
+
     sections = [
         f"本周时间：{start} 至 {end}",
         "",
         "一、本周完成",
         *(done_items or ["- 暂无"]),
+    ]
+    if followup_text:
+        sections += ["", followup_text]
+    sections += [
         "",
-        "二、风险与阻塞",
+        "三、风险与阻塞",
         *(blocker_items or ["- 暂无"]),
         "",
-        "三、下周计划",
+        "四、下周计划",
         *(next_items or ["- 暂无"]),
     ]
     return "\n".join(sections)
 
 
-async def call_llm_weekly_summary(start: str, end: str, logs: list[dict[str, Any]]) -> str | None:
+async def call_llm_weekly_summary(
+    start: str,
+    end: str,
+    logs: list[dict[str, Any]],
+    git_data: dict[str, Any] | None = None,
+    followup: dict[str, Any] | None = None,
+) -> str | None:
+    materials: dict[str, Any] = {
+        "start": start,
+        "end": end,
+        "weekly_logs": logs,
+    }
+    if git_data and git_data.get("configured") and git_data.get("repos"):
+        materials["git_commits"] = git_data["repos"]
+    if followup and followup.get("has_plans"):
+        materials["plan_followup"] = {
+            "completed": [item["plan"] for item in followup["completed_plans"]],
+            "missed": [item["plan"] for item in followup["missed_plans"]],
+            "new_work": followup["new_work"],
+        }
+
+    instruction = (
+        "请基于以下 JSON 材料生成中文周报，输出分四部分："
+        "一、本周完成：融合日报任务与 git 提交，把相近事项合并归纳成条目，不要逐条罗列 commit；"
+        "git 提交信息为英文时，用中文概括其工作含义。"
+        "二、上周计划回顾：基于 plan_followup 标注已完成、未完成及新增工作。"
+        "三、风险与阻塞。四、下周计划。"
+        "只能使用材料中出现的事实，禁止编造；材料缺失的部分写暂无。"
+    )
     prompt = json.dumps(
-        {
-            "start": start,
-            "end": end,
-            "logs": logs,
-            "instruction": "请生成中文周报，分成本周完成、风险与阻塞、下周计划三部分，表达专业简洁。",
-        },
+        {"instruction": instruction, "materials": materials},
         ensure_ascii=False,
     )
     content = await call_langchain(
         prompt,
-        "你是一个专业周报助手，擅长总结工作周报。",
+        "你是一个专业周报助手，擅长把多来源的工作证据归纳成简洁专业的中文周报。",
         timeout=60.0,
     )
     if content:
@@ -591,14 +655,22 @@ async def call_llm_weekly_summary(start: str, end: str, logs: list[dict[str, Any
     return None
 
 
-async def generate_weekly_summary(start: str, end: str, logs: list[dict[str, Any]]) -> str:
+async def generate_weekly_summary(
+    start: str,
+    end: str,
+    logs: list[dict[str, Any]],
+    git_data: dict[str, Any] | None = None,
+    followup: dict[str, Any] | None = None,
+) -> str:
+    git_text = render_git_commits_text(git_data) if git_data else ""
+    followup_text = render_plan_followup_text(followup) if followup else ""
     try:
-        content = await call_llm_weekly_summary(start, end, logs)
+        content = await call_llm_weekly_summary(start, end, logs, git_data, followup)
         if content:
             return content
     except Exception:
         pass
-    return local_weekly_summary(start, end, logs)
+    return local_weekly_summary(start, end, logs, git_text, followup_text)
 
 
 async def parse_chat_intent(payload: ChatRequest) -> ChatIntent:
@@ -614,6 +686,7 @@ async def parse_chat_intent(payload: ChatRequest) -> ChatIntent:
                     "如果用户要查询某天日报，intent=get_daily_log。"
                     "如果用户要生成周报，intent=get_weekly_report。"
                     "如果用户要查看周数据但不要求生成报告，intent=get_weekly_data。"
+                    "如果用户要查看 git 提交、commit 记录、代码提交，intent=get_git_commits。"
                     "如果用户要运行 eval/harness/质量评估，intent=run_eval。"
                     "如果用户要检查 LLM 状态，intent=debug_llm。"
                     "日期必须使用 YYYY-MM-DD；如果无法判断日期可留空。不要编造用户没有表达的日报正文。",
@@ -646,7 +719,7 @@ async def parse_chat_intent(payload: ChatRequest) -> ChatIntent:
                 parsed.content = parsed.content or strip_chat_command_prefix(payload.message)
             elif parsed.intent == "get_daily_log":
                 parsed.date = parsed.date or payload.date or extract_iso_date(payload.message) or today_str()
-            elif parsed.intent in {"get_weekly_report", "get_weekly_data"}:
+            elif parsed.intent in {"get_weekly_report", "get_weekly_data", "get_git_commits"}:
                 default_start, default_end = last_week_range()
                 parsed.start = parsed.start or payload.start or default_start
                 parsed.end = parsed.end or payload.end or default_end
@@ -693,16 +766,51 @@ def tool_get_weekly_data(start: str, end: str) -> dict[str, Any]:
     }
 
 
-async def tool_create_weekly_report(start: str, end: str) -> dict[str, Any]:
+async def tool_get_git_commits(start: str, end: str) -> dict[str, Any]:
+    parse_date(start)
+    parse_date(end)
+    return await asyncio.to_thread(collect_weekly_commits, start, end)
+
+
+async def tool_create_weekly_report(
+    start: str,
+    end: str,
+    include_git: bool = True,
+    include_followup: bool = True,
+) -> dict[str, Any]:
     weekly_data = tool_get_weekly_data(start, end)
-    report = await generate_weekly_summary(start, end, weekly_data["logs"])
-    return {
+
+    git_data: dict[str, Any] | None = None
+    if include_git:
+        git_data = await asyncio.to_thread(collect_weekly_commits, start, end)
+
+    followup: dict[str, Any] | None = None
+    if include_followup:
+        prev_start, prev_end = previous_week_range(start, end)
+        previous_logs = filter_logs_by_range(load_logs(), prev_start, prev_end)
+        followup = build_plan_followup(previous_logs, weekly_data["logs"])
+
+    report = await generate_weekly_summary(start, end, weekly_data["logs"], git_data, followup)
+
+    result: dict[str, Any] = {
         "start": start,
         "end": end,
         "count": weekly_data["count"],
         "report": report,
         "logs": weekly_data["logs"],
     }
+    if git_data is not None:
+        result["git"] = {
+            "configured": git_data.get("configured"),
+            "scan_dir": git_data.get("scan_dir"),
+            "author": git_data.get("author"),
+            "scanned_repos": git_data.get("scanned_repos"),
+            "active_repos": git_data.get("active_repos"),
+            "total_commits": git_data.get("total_commits"),
+        }
+    if followup is not None:
+        result["plan_followup"] = followup
+    return result
 
 
 def tool_run_eval() -> dict[str, Any]:
@@ -769,9 +877,20 @@ def get_weekly(start: str, end: str) -> dict[str, Any]:
     return tool_get_weekly_data(start, end)
 
 
+@app.get("/git/commits")
+async def get_git_commits(start: str | None = None, end: str | None = None) -> dict[str, Any]:
+    default_start, default_end = last_week_range()
+    return await tool_get_git_commits(start or default_start, end or default_end)
+
+
 @app.post("/weekly-report")
 async def create_weekly_report(payload: WeeklyReportCreate) -> dict[str, Any]:
-    return await tool_create_weekly_report(payload.start, payload.end)
+    return await tool_create_weekly_report(
+        payload.start,
+        payload.end,
+        include_git=payload.include_git,
+        include_followup=payload.include_followup,
+    )
 
 
 @app.post("/chat")
@@ -787,21 +906,28 @@ async def chat(payload: ChatRequest) -> dict[str, Any]:
     elif intent.intent == "get_daily_log":
         result = tool_get_daily_log(intent.date or today_str())
     elif intent.intent == "get_weekly_report":
-        start, end = last_week_range()
-        result = await tool_create_weekly_report(start, end)
+        default_start, default_end = last_week_range()
+        result = await tool_create_weekly_report(
+            intent.start or default_start,
+            intent.end or default_end,
+        )
     elif intent.intent == "get_weekly_data":
-        start, end = last_week_range()
-        result = tool_get_weekly_data(start, end)
+        default_start, default_end = last_week_range()
+        result = tool_get_weekly_data(intent.start or default_start, intent.end or default_end)
+    elif intent.intent == "get_git_commits":
+        default_start, default_end = last_week_range()
+        result = await tool_get_git_commits(intent.start or default_start, intent.end or default_end)
     elif intent.intent == "run_eval":
         result = tool_run_eval()
     elif intent.intent == "debug_llm":
         result = await debug_llm()
     else:
         result = {
-            "message": "暂时无法识别你的请求。你可以说：保存今天日报、查询今天日报、生成本周周报、运行 eval。",
+            "message": "暂时无法识别你的请求。你可以说：保存今天日报、查询今天日报、查看本周 git 提交、生成本周周报、运行 eval。",
             "examples": [
                 "帮我保存今天日报：完成 README 优化，明天接入 LangGraph",
                 "查询今天日报",
+                "查看本周 git 提交记录",
                 "生成本周周报",
                 "运行 eval harness",
             ],
